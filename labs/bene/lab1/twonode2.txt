@@ -1,0 +1,8 @@
+# n1 -- n2
+#
+n1 n2
+n2 n1
+
+# link configuration
+n1 n2 100bps 10ms
+n2 n1 100bps 10ms
