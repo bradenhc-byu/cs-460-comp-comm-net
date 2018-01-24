@@ -11,7 +11,7 @@ class SimpleDelayHandler(object):
             "received:", Sim.scheduler.current_time() - packet.created
 
 
-class DelayHandler(object):
+class PacketHandler(object):
     def __init__(self, name):
         self.name = name
 
@@ -86,38 +86,49 @@ def two_node_network():
     Sim.scheduler.run()
 
 
-def three_node_network():
-    print "THREE NODE NETWORK"
+def run_three_node_network_simulation(file):
+    print "\nBeginning Network simulation with configuration file '{0}'".format(file)
     # reset the simulator
     Sim.scheduler.reset()
 
     # setup the network connection
-    network1 = Network("./threenode1.txt")
+    network = Network(file)
 
     # initialize the routes in the network
-    n1 = network1.get_node("n1")
-    n2 = network1.get_node("n2")
-    n3 = network1.get_node("n3")
+    n1 = network.get_node("n1")
+    n2 = network.get_node("n2")
+    n3 = network.get_node("n3")
     n1.add_forwarding_entry(address=n2.get_address("n1"), link=n1.links[0])
+    n1.add_forwarding_entry(address=n3.get_address("n2"), link=n1.links[0])
     n2.add_forwarding_entry(address=n1.get_address("n2"), link=n2.links[0])
     n2.add_forwarding_entry(address=n3.get_address("n2"), link=n2.links[1])
     n3.add_forwarding_entry(address=n2.get_address("n3"), link=n3.links[0])
 
     # configure a packet handler
-    phn2 = DelayHandler("n2")
-    phn3 = DelayHandler("n3")
-    n2.add_protocol(protocol="delay", handler=phn2)
-    n3.add_protocol(protocol="delay", handler=phn3)
+    phn2 = PacketHandler("n2")
+    phn3 = PacketHandler("n3")
+    n2.add_protocol(protocol="forward", handler=phn2)
+    n3.add_protocol(protocol="forward", handler=phn3)
 
     # Create the packets to be sent
     packet_size = 8000
     transmission_delay = packet_size / n1.links[0].bandwidth
     for x in xrange(1000):
-        p1 = Packet(destination_address=n3.get_address('n2'), ident=x, protocol="delay", length=packet_size)
-        Sim.scheduler.add(delay=x*transmission_delay, event=p1, handler=n1.send_packet)
+        p = Packet(destination_address=n3.get_address('n2'), ident=x, protocol="forward", length=packet_size)
+        Sim.scheduler.add(delay=x * transmission_delay, event=p, handler=n1.send_packet)
 
     # run the simulation
     Sim.scheduler.run()
+
+
+def three_node_network():
+    print "THREE NODE NETWORK"
+    # Run the two fast link
+    run_three_node_network_simulation("./threenode1.txt")
+    # Run the two ultra-fast links
+    run_three_node_network_simulation("./threenode2.txt")
+    # Run the varying links
+    run_three_node_network_simulation("./threenode3.txt")
 
 
 def main():
