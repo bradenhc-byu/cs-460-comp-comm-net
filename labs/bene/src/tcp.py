@@ -33,6 +33,15 @@ class TCP(Connection):
         self.timer = None
         # timeout duration in seconds
         self.timeout = 1
+        # RTO calculation variables
+        self.rto = 1
+        self.srtt = 0
+        self.rttvar = 0
+        # Variables for handling fast retransmit
+        self.fast_enable = False
+        self.last_ack = 0
+        self.same_ack_count = 0
+        self.fast_retransmitted = False
 
         # -- Receiver functionality
 
@@ -60,16 +69,24 @@ class TCP(Connection):
             # handle ACK
             self.handle_ack(packet)
         if packet.length > 0:
-            # handle data
+            # handle networks
             self.handle_data(packet)
+
+    def set_fast_retransmit_enabled(self, val):
+        self.fast_enable = val
 
     ''' Sender '''
 
     def send(self, data):
-        """ Send data on the connection. Called by the application. This
-            code currently sends all data immediately. """
-        self.send_packet(data, self.sequence)
-        self.timer = Sim.scheduler.add(delay=self.timeout, event='retransmit', handler=self.retransmit)
+        """ Send networks on the connection. Called by the application. This code puts the
+        networks to send in a send buffer that handles when the networks will be sent."""
+        # Put the networks in the send buffer
+        self.send_buffer.put(data)
+        # Check for available bytes to send
+        while self.send_buffer.available() != 0 and self.send_buffer.outstanding() < self.window:
+            # Only send as many bytes as the window allows
+            send_data, sequence = self.send_buffer.get(self.mss)
+            self.send_packet(send_data, sequence)
 
     def send_packet(self, data, sequence):
         packet = TCPPacket(source_address=self.source_address,
@@ -101,11 +118,64 @@ class TCP(Connection):
         self.plot_sequence(packet.ack_number - 1000,'ack')
         self.trace("%s (%d) received ACK from %d for %d" % (
             self.node.hostname, packet.destination_address, packet.source_address, packet.ack_number))
+
+        # Handle fast retransmit
+        if self.fast_enable:
+            if packet.ack_number == self.last_ack:
+                self.same_ack_count += 1
+                if self.same_ack_count == 3 and not self.fast_retransmitted:
+                    self.trace("%s (%d) sending fast retransmit to %d for %d" % (
+                        self.node.hostname, packet.destination_address, packet.source_address, packet.ack_number))
+                    self.cancel_timer()
+                    Sim.scheduler.add(delay=0, event='retransmit', handler=self.retransmit)
+                    self.fast_retransmitted = True
+                    return
+            else:
+                # Reset fast retransmit variables
+                self.same_ack_count = 0
+                self.last_ack = packet.ack_number
+                self.fast_retransmitted = False
+
+        # Update the send buffer
+        self.sequence = packet.ack_number
+        self.send_buffer.slide(packet.ack_number)
+        # Send additional bytes from the send buffer if there are any
+        while self.send_buffer.available() != 0 and self.send_buffer.outstanding() < self.window:
+            # Only send as many bytes as the window allows
+            send_data, sequence = self.send_buffer.get(self.mss)
+            self.send_packet(send_data, sequence)
+
+        # Calculate the SRTT and RTTVAR
+        if self.srtt == 0:
+            # First estimate
+            self.srtt = Sim.scheduler.current_time() - packet.created
+            self.rttvar = self.srtt / 2.0
+        else:
+            r = Sim.scheduler.current_time() - packet.created
+            alpha = 0.125
+            beta = 0.25
+            self.rttvar = (1 - beta) * self.rttvar + beta * abs(self.srtt - r)
+            self.srtt = (1 - alpha) * self.srtt + alpha * r
+        # Update the RTO
+        rto = self.srtt + 4 * self.rttvar
+        self.rto = rto if rto >= 1.0 else 1.0
+
         self.cancel_timer()
+        if self.send_buffer.outstanding() != 0:
+            self.timer = Sim.scheduler.add(delay=self.timeout, event='retransmit', handler=self.retransmit)
 
     def retransmit(self, event):
-        """ Retransmit data. """
+        """ Retransmit networks. """
         self.trace("%s (%d) retransmission timer fired" % (self.node.hostname, self.source_address))
+        data, sequence = self.send_buffer.resend(self.mss)
+        # Handle the case when we get a misfire on retransmission and their isn't any data left
+        # in the send buffer
+        if len(data) == 0:
+            self.cancel_timer()
+            return
+        self.send_packet(data, sequence)
+        self.timer = Sim.scheduler.add(delay=self.rto, event='retransmit', handler=self.retransmit)
+
 
     def cancel_timer(self):
         """ Cancel the timer. """
@@ -117,12 +187,15 @@ class TCP(Connection):
     ''' Receiver '''
 
     def handle_data(self, packet):
-        """ Handle incoming data. This code currently gives all data to
+        """ Handle incoming networks. This code currently gives all networks to
             the application, regardless of whether it is in order, and sends
             an ACK."""
         self.trace("%s (%d) received TCP segment from %d for %d" % (
             self.node.hostname, packet.destination_address, packet.source_address, packet.sequence))
-        self.app.receive_data(packet.body)
+        self.receive_buffer.put(packet.body, packet.sequence)
+        data, start_sequence = self.receive_buffer.get()
+        self.app.receive_data(data)
+        self.ack = start_sequence + len(data)
         self.send_ack()
 
     def send_ack(self):
