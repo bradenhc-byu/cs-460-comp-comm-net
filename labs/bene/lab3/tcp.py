@@ -26,6 +26,8 @@ class TCP(Connection):
         self.sequence = 0
         # plot sequence numbers
         self.plot_sequence_header()
+        # plot congestion window headers
+        self.plot_window_header()
         # packets to drop
         self.drop = drop
         self.dropped = []
@@ -42,6 +44,9 @@ class TCP(Connection):
         self.last_ack = 0
         self.same_ack_count = 0
         self.fast_retransmitted = False
+        # Congestion control
+        self.threshold = 100000
+        self.increment = 0
 
         # -- Receiver functionality
 
@@ -62,6 +67,14 @@ class TCP(Connection):
     def plot_sequence(self,sequence,event):
         if self.node.hostname =='n1':
             Sim.plot('sequence.csv','%s,%s,%s\n' % (Sim.scheduler.current_time(),sequence,event))
+
+    def plot_window_header(self):
+        if self.node.hostname == 'n1':
+            Sim.plot('cwnd.csv','Time,Congestion Window,Threshold,Event\n')
+
+    def plot_window(self, event):
+        if self.node.hostname == 'n1':
+            Sim.plot('cwnd.csv', '%s,%s,%s,%s\n' % (Sim.scheduler.current_time(), self.window, self.threshold, event))
 
     def receive_packet(self, packet):
         """ Receive a packet from the network layer. """
@@ -135,6 +148,12 @@ class TCP(Connection):
                 self.last_ack = packet.ack_number
                 self.fast_retransmitted = False
 
+        # Congestion control
+        if self.window >= self.threshold:
+            self.additive_increase(packet.ack_number - self.sequence)
+        else:
+            self.slow_start(packet.ack_number - self.sequence)
+
 
         # Update the send buffer
         self.sequence = packet.ack_number
@@ -169,7 +188,12 @@ class TCP(Connection):
         self.trace("%s (%d) sending fast retransmit to %d for %d" % (
             self.node.hostname, packet.destination_address, packet.source_address, packet.ack_number))
         self.cancel_timer()
-        data, sequence = self.send_buffer.resend(self.mss)
+        self.threshold = max(self.window // 2, self.mss)
+        self.threshold = self.threshold - (self.threshold % self.mss)
+        self.window = self.mss
+        self.increment = 0
+        self.plot_window('fast retransmit')
+        data, sequence = self.send_buffer.resend(self.window)
         if len(data) == 0:
             return
         self.send_packet(data, sequence)
@@ -180,7 +204,12 @@ class TCP(Connection):
     def retransmit(self, event):
         """ Retransmit networks. """
         self.trace("%s (%d) retransmission timer fired" % (self.node.hostname, self.source_address))
-        data, sequence = self.send_buffer.resend(self.mss)
+        self.threshold = max(self.window // 2, self.mss)
+        self.threshold = self.threshold - (self.threshold % self.mss)
+        self.window = self.mss
+        self.increment = 0
+        self.plot_window('retransmission')
+        data, sequence = self.send_buffer.resend(self.window)
         # Handle the case when we get a misfire on retransmission and their isn't any data left
         # in the send buffer
         if len(data) == 0:
@@ -188,6 +217,19 @@ class TCP(Connection):
             return
         self.send_packet(data, sequence)
         self.timer = Sim.scheduler.add(delay=self.rto, event='retransmit', handler=self.retransmit)
+
+    def slow_start(self, bytes):
+        self.trace("%s (%d) incrementing slow start" % (self.node.hostname, self.source_address))
+        self.window = self.window + (bytes if bytes <= self.mss else self.mss)
+        self.plot_window('slow start')
+
+    def additive_increase(self, bytes):
+        self.increment = self.increment +  bytes * self.mss / self.window
+        if self.increment >= self.mss:
+            self.trace("%s (%d) incrementing additive increase" % (self.node.hostname, self.source_address))
+            self.window = self.window + self.mss
+            self.increment = self.increment - self.mss
+            self.plot_window('additive increase')
 
 
     def cancel_timer(self):

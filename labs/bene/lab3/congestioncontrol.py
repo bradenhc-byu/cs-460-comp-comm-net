@@ -46,6 +46,7 @@ class Main(object):
         self.loss = None
         self.window = None
         self.fast_retransmit = None
+        self.drops = None
 
     def parse_options(self):
         parser = optparse.OptionParser(usage="%prog [options]",
@@ -66,12 +67,16 @@ class Main(object):
         parser.add_option("-r", "--fast-retransmit",  action="store_true", dest="fast",
                           default=False,
                           help="enable fast retransmit")
+        parser.add_option("-d", "--drop-packets", type="str", dest="drops",
+                           default="",
+                          help="list of packets/segments to drop")
 
         (options, args) = parser.parse_args()
         self.filename = options.filename
         self.loss = options.loss
         self.window = options.window
         self.fast_retransmit = options.fast
+        self.drops = [int(x) for x in options.drops.split(",")] if len(options.drops) > 0 else []
 
     def diff(self):
         args = ['diff', '-u', self.filename, os.path.join(self.directory, self.filename)]
@@ -109,8 +114,8 @@ class Main(object):
         a = AppHandler(self.filename)
 
         # setup connection
-        c1 = TCP(t1, n1.get_address('n2'), 1, n2.get_address('n1'), 1, a, window=self.window)
-        c2 = TCP(t2, n2.get_address('n1'), 1, n1.get_address('n2'), 1, a, window=self.window)
+        c1 = TCP(t1, n1.get_address('n2'), 1, n2.get_address('n1'), 1, a, window=self.window, drop=self.drops)
+        c2 = TCP(t2, n2.get_address('n1'), 1, n1.get_address('n2'), 1, a, window=self.window, drop=self.drops)
 
         # setup fast retransmit
         if self.fast_retransmit:

@@ -9,6 +9,8 @@ class Node(object):
         self.links = []
         self.protocols = {}
         self.forwarding_table = {}
+        # Added for the routing lab
+        self.distance_vectors = {}
 
     @staticmethod
     def trace(message):
@@ -55,6 +57,95 @@ class Node(object):
         if address not in self.forwarding_table:
             return
         del self.forwarding_table[address]
+
+    # -- Distance Vectors --
+
+    def init_routing(self):
+        # Initialize the forwarding table and distance vector for the node
+        self.forwarding_table = {}
+        self.distance_vectors = {}
+        distance_vector = {}
+        for l in self.links:
+            if l.running:
+                link_address = self.get_address(l.endpoint.hostname)
+                self.add_forwarding_entry(link_address, l)
+                distance_vector[link_address] = 1
+        self.distance_vectors[self.hostname] = {
+            "timestamp": Sim.scheduler.current_time(),
+            "dv": distance_vector
+        }
+
+    def get_distance_vector(self, hostname=None):
+        if hostname is None and self.hostname in self.distance_vectors:
+            return self.distance_vectors[self.hostname]["dv"]
+        elif hostname in self.distance_vectors:
+            return self.distance_vectors[hostname]["dv"]
+        else:
+            return None
+
+    def get_distance_vector_time(self, hostname=None):
+        if hostname is None and self.hostname in self.distance_vectors:
+            return self.distance_vectors[self.hostname]["timestamp"]
+        elif hostname in self.distance_vectors:
+            return self.distance_vectors[hostname]["timestamp"]
+        else:
+            return None
+
+    def update_distance_vector(self, hostname, vector):
+        changed = self.vector_changed(hostname, vector)
+        self.distance_vectors[hostname] = {
+            "timestamp": Sim.scheduler.current_time(),
+            "dv": vector
+        }
+        if changed:
+            self.build_forwarding_table()
+            return True
+        else:
+            return False
+
+    def build_forwarding_table(self):
+        my_vector = self.distance_vectors[self.hostname]["dv"]
+        for host in self.distance_vectors:
+            if host != self.hostname:
+                vector = self.distance_vectors[host]["dv"]
+                for k, v in vector.iteritems():
+                    found = False
+                    for l in self.links:
+                        if k == l.address:
+                            found = True
+                            break
+                    if found:
+                        continue
+                    if k in my_vector.keys():
+                        if v + 1 < my_vector[k]:
+                            my_vector[k] = v + 1
+                            self.add_forwarding_entry(k, self.get_link(host))
+                    else:
+                        my_vector[k] = v + 1
+                        self.add_forwarding_entry(k, self.get_link(host))
+
+        self.distance_vectors[self.hostname]["timestamp"] = Sim.scheduler.current_time()
+
+    def remove_distance_vector(self, hostname):
+        if hostname in self.distance_vectors:
+            del self.distance_vectors[hostname]
+            self.init_routing()
+            self.build_forwarding_table()
+            return True
+        return False
+
+    def vector_changed(self, hostname, new_vector):
+        if hostname in self.distance_vectors:
+            old_vector = self.distance_vectors[hostname]["dv"]
+            if len(old_vector) != len(new_vector):
+                return True
+            else:
+                for k in old_vector:
+                    if k not in new_vector or old_vector[k] != new_vector[k]:
+                        return True
+                return False
+        else:
+            return True
 
     # -- Handling packets --
 

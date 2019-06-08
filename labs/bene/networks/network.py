@@ -97,3 +97,10 @@ class Network(object):
     @staticmethod
     def convert(value):
         return float(re.sub("[^0-9.]", "", value))
+
+    def get_link(self, link_number):
+        for n in self.nodes:
+            for l in self.nodes[n].links:
+                if l.address == link_number:
+                    return l
+        return None

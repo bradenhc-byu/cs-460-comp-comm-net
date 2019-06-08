@@ -1,0 +1,44 @@
+pydev debugger: process 11914 is connecting
+
+0 n1 (1) sending TCP segment to 2 for 0
+0.108 n2 (2) received TCP segment from 1 for 0
+0.108 application got 1000 bytes
+0.108 n2 (2) sending TCP ACK to 1 for 1000
+0.208 n1 (1) received ACK from 2 for 1000
+0.208 n1 (1) incrementing slow start
+Traceback (most recent call last):
+  File "/home/braden/Apps/pycharm-2017.3.3/helpers/pydev/pydevd.py", line 1668, in <module>
+    main()
+  File "/home/braden/Apps/pycharm-2017.3.3/helpers/pydev/pydevd.py", line 1662, in main
+    globals = debugger.run(setup['file'], None, None, is_module)
+  File "/home/braden/Apps/pycharm-2017.3.3/helpers/pydev/pydevd.py", line 1072, in run
+    pydev_imports.execfile(file, globals, locals)  # execute the script
+  File "/home/braden/Code/remote/github/hitch-b24/byu-cs460/labs/bene/lab3/congestioncontrol.py", line 138, in <module>
+    m = Main()
+  File "/home/braden/Code/remote/github/hitch-b24/byu-cs460/labs/bene/lab3/congestioncontrol.py", line 43, in __init__
+    self.run()
+  File "/home/braden/Code/remote/github/hitch-b24/byu-cs460/labs/bene/lab3/congestioncontrol.py", line 134, in run
+    Sim.scheduler.run()
+  File "/home/braden/Code/remote/github/hitch-b24/byu-cs460/labs/bene/src/scheduler.py", line 27, in run
+    self.scheduler.run()
+  File "/usr/lib/python2.7/sched.py", line 117, in run
+    action(*argument)
+  File "/home/braden/Code/remote/github/hitch-b24/byu-cs460/labs/bene/src/node.py", line 80, in receive_packet
+    self.deliver_packet(packet)
+  File "/home/braden/Code/remote/github/hitch-b24/byu-cs460/labs/bene/src/node.py", line 95, in deliver_packet
+    self.protocols[packet.protocol].receive_packet(packet)
+  File "/home/braden/Code/remote/github/hitch-b24/byu-cs460/labs/bene/src/transport.py", line 21, in receive_packet
+    self.binding[address_data].receive_packet(packet)
+  File "/home/braden/Code/remote/github/hitch-b24/byu-cs460/labs/bene/lab3/tcp.py", line 83, in receive_packet
+    self.handle_ack(packet)
+  File "/home/braden/Code/remote/github/hitch-b24/byu-cs460/labs/bene/lab3/tcp.py", line 164, in handle_ack
+    send_data, sequence = self.send_buffer.get(self.mss)
+  File "/home/braden/Code/remote/github/hitch-b24/byu-cs460/labs/bene/lab3/tcp.py", line 164, in handle_ack
+    send_data, sequence = self.send_buffer.get(self.mss)
+  File "/home/braden/Apps/pycharm-2017.3.3/helpers/pydev/_pydevd_bundle/pydevd_frame.py", line 714, in trace_dispatch
+    self.do_wait_suspend(thread, frame, event, arg)
+  File "/home/braden/Apps/pycharm-2017.3.3/helpers/pydev/_pydevd_bundle/pydevd_frame.py", line 125, in do_wait_suspend
+    self._args[0].do_wait_suspend(*args, **kwargs)
+  File "/home/braden/Apps/pycharm-2017.3.3/helpers/pydev/pydevd.py", line 817, in do_wait_suspend
+    time.sleep(0.01)
+KeyboardInterrupt

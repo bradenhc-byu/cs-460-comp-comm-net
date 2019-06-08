@@ -5,4 +5,4 @@ n2 n1
 
 # link configuration
 n1 n2 10Mbps 10ms 100pkts
-n2 n1 10Mbps 10ms 100pkts
+n2 n1 1M0bps 10ms 100pkts
